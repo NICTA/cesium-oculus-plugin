@@ -111,7 +111,7 @@ function run() {
     var originalCamera = camera.clone();
 
     // Take into account user head rotation
-    cesiumOculus.applyOculusRotation(camera, CesiumOculus.getCameraRotationMatrix(camera), cesiumOculus.getRotation());
+    cesiumOculus.applyOculusTransformation(camera, cesiumOculus.getRotation(), cesiumOculus.getPosition());
     var modCamera = camera.clone();
 
     // Render right eye
@@ -127,8 +127,7 @@ function run() {
     scene.render();
 
     // Restore state
-    CesiumOculus.slaveCameraUpdate(originalCamera, 0.0, camera);
-    CesiumOculus.setCameraState(originalCamera, camera);
+    CesiumOculus.slaveCameraUpdate(modCamera, 0.0, camera);    
 
     Cesium.requestAnimationFrame(tick);
   };
