@@ -14,53 +14,41 @@ var CesiumOculus = (function() {
     this.refMtx = new Cesium.Matrix3();
 
     var that = this;
-    vr.load(function(error) {
 
-      if (error) {
-        that.errorHandler(error.toString());
-      }
+    that.hmdInfo = {
+        "deviceName": "Oculus Rift DK2",
+        "deviceManufacturer": "Oculus VR",
+        "deviceVersion": 0,
+        "desktopX": 0,
+        "desktopY": 0,
+        "resolutionHorz": 1920,
+        "resolutionVert": 1080,
+        "screenSizeHorz": 0.14976,
+        "screenSizeVert": 0.0936,
+        "screenCenterVert": 0.0468,
+        "eyeToScreenDistance": 0.041,
+        "lensSeparationDistance": 0.0635,
+        "interpupillaryDistance": 0.064,
+        "distortionK": {
+            "0": 1,
+            "1": 0.2199999988079071,
+            "2": 0.23999999463558197,
+            "3": 0
+        },
+        "chromaAbCorrection": {
+            "0": 0.9959999918937683,
+            "1": -0.004000000189989805,
+            "2": 1.0140000581741333,
+            "3": 0
+        }
+    };
+    that.state = vr.createState();
+    that.params = {
+        "left": getParams(that.hmdInfo, 'left'),
+        "right": getParams(that.hmdInfo, 'right')
+    };
 
-      that.state = new vr.State();
-      pollState(that.state, that.errorHandler);
-
-      if (that.state.hmd.present) {
-        that.hmdInfo = vr.getHmdInfo();
-      } else {
-        that.errorHandler("No head-mounted display present. Using default parameters");
-        that.hmdInfo = {
-          "deviceName" : "Oculus Rift DK1",
-          "deviceManufacturer" : "Oculus VR",
-          "deviceVersion" : 0,
-          "desktopX" : 0,
-          "desktopY" : 0,
-          "resolutionHorz" : 1280,
-          "resolutionVert" : 800,
-          "screenSizeHorz" : 0.14976,
-          "screenSizeVert" : 0.0936,
-          "screenCenterVert" : 0.0468,
-          "eyeToScreenDistance" : 0.041,
-          "lensSeparationDistance" : 0.0635,
-          "interpupillaryDistance" : 0.064,
-          "distortionK" : {
-            "0" : 1,
-            "1" : 0.2199999988079071,
-            "2" : 0.23999999463558197,
-            "3" : 0
-          },
-          "chromaAbCorrection" : {
-            "0" : 0.9959999918937683,
-            "1" : -0.004000000189989805,
-            "2" : 1.0140000581741333,
-            "3" : 0
-          }
-        };
-      }
-
-      that.params = {
-        "left" : getParams(that.hmdInfo, 'left'),
-        "right" : getParams(that.hmdInfo, 'right')
-      };
-
+    vr.wait(function(error) {
       if (typeof (callback) !== 'undefined') {
         callback(that.hmdInfo);
       }
@@ -95,12 +83,6 @@ var CesiumOculus = (function() {
     }
   };
 
-  function pollState(state, errorHandler) {
-    if (!vr.pollState(state)) {
-      errorHandler("vr.js plugin not found/error polling");
-    }
-  }
-
   CesiumOculus.prototype.toQuat = function(r) {
     if (r[0] === 0 && r[1] === 0 && r[2] === 0 && r[3] === 0) {
       return Cesium.Quaternion.IDENTITY;
@@ -108,9 +90,14 @@ var CesiumOculus = (function() {
     return new Cesium.Quaternion(r[0], r[1], r[2], r[3]);
   };
 
-  CesiumOculus.prototype.getRotation = function() {
-    pollState(this.state, this.errorHandler);
-    return this.toQuat(this.state.hmd.rotation);
+  CesiumOculus.prototype.getRotation = function () {      
+      vr.poll(this.state)      
+      return this.toQuat(this.state.oculus.rotation);
+  };
+
+  CesiumOculus.prototype.getPosition = function () {
+      vr.poll(this.state)
+      return this.toQuat(this.state.oculus.position);
   };
 
   CesiumOculus.getUniforms = function(hmd, eye) {
@@ -226,45 +213,31 @@ var CesiumOculus = (function() {
     slave.lookAt(eye, target, up);
   };
 
-  CesiumOculus.setCameraRotationMatrix = function(rotation, camera) {
-    Cesium.Matrix3.getRow(rotation, 0, camera.right);
-    Cesium.Matrix3.getRow(rotation, 1, camera.up);
-    Cesium.Cartesian3.negate(Cesium.Matrix3.getRow(rotation, 2, camera.direction), camera.direction);
-  };
+  CesiumOculus.prototype.applyOculusTransformation = function(camera, rotation, position) {
+      var factor = 5000;
+      if (this.lastPosition) {
+          camera.moveLeft(this.lastPosition.x * factor);
+          camera.moveDown(this.lastPosition.y * factor);
+          camera.moveForward(this.lastPosition.z * factor);
+      }
 
-  CesiumOculus.getCameraRotationMatrix = function(camera) {
-    var result = new Cesium.Matrix3();
-    Cesium.Matrix3.setRow(result, 0, camera.right, result);
-    Cesium.Matrix3.setRow(result, 1, camera.up, result);
-    Cesium.Matrix3.setRow(result, 2, Cesium.Cartesian3.negate(camera.direction, new Cesium.Cartesian3()), result);
-    return result;
-  };
+      if (this.lastRotation) {
+          camera.look(camera.direction, -this.lastRotation.z * Math.PI);
+          camera.lookDown(this.lastRotation.x * Math.PI);
+          camera.lookRight(this.lastRotation.y * Math.PI);
+      }   
 
-  // Not here!
-  CesiumOculus.setCameraState = function(src, camera){
-    camera.position = Cesium.Cartesian3.clone(src.position);
-    camera.direction = Cesium.Cartesian3.clone(src.direction);
-    camera.up = Cesium.Cartesian3.clone(src.up);
-    camera.right = Cesium.Cartesian3.clone(src.right);
-    camera.transform = Cesium.Matrix4.clone(src.transform);
-    camera.frustum = src.frustum.clone();
-  };
+      camera.lookLeft(rotation.y * Math.PI);
+      camera.lookUp(rotation.x * Math.PI);
+      camera.look(camera.direction, rotation.z * Math.PI);
 
-  CesiumOculus.prototype.applyOculusRotation = function(camera, prevCameraMatrix, rotation) {
-    var oculusRotationMatrix = Cesium.Matrix3.fromQuaternion(Cesium.Quaternion.inverse(rotation, new Cesium.Matrix3()));
-    var sceneCameraMatrix = CesiumOculus.getCameraRotationMatrix(camera);
-    if (this.firstTime) {
-      Cesium.Matrix3.inverse(oculusRotationMatrix, this.refMtx);
-      Cesium.Matrix3.multiply(this.refMtx, sceneCameraMatrix, this.refMtx);
-    } else {
-      var temp = new Cesium.Matrix3();
-      Cesium.Matrix3.inverse(prevCameraMatrix, temp);
-      Cesium.Matrix3.multiply(temp, sceneCameraMatrix, temp);
-      Cesium.Matrix3.multiply(this.refMtx, temp, this.refMtx);
-    }
-    Cesium.Matrix3.multiply(oculusRotationMatrix, this.refMtx, prevCameraMatrix);
-    CesiumOculus.setCameraRotationMatrix(prevCameraMatrix, camera);
-    this.firstTime = false;
+      camera.moveBackward(position.z * factor);
+      camera.moveUp(position.y * factor);
+      camera.moveRight(position.x * factor);
+
+      this.lastRotation = rotation;
+      this.lastPosition = position;
+      this.lastDirection = camera.position   
   };
 
   return CesiumOculus;
