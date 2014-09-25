@@ -215,11 +215,7 @@ var CesiumOculus = (function() {
 
   CesiumOculus.prototype.applyOculusTransformation = function(camera, rotation, position) {
       var factor = 5000;
-      if (this.lastPosition) {
-          camera.moveLeft(this.lastPosition.x * factor);
-          camera.moveDown(this.lastPosition.y * factor);
-          camera.moveForward(this.lastPosition.z * factor);
-      }
+
 
       if (this.lastRotation) {
           camera.look(camera.direction, -this.lastRotation.z * Math.PI);
@@ -227,13 +223,19 @@ var CesiumOculus = (function() {
           camera.lookRight(this.lastRotation.y * Math.PI);
       }   
 
-      camera.lookLeft(rotation.y * Math.PI);
-      camera.lookUp(rotation.x * Math.PI);
-      camera.look(camera.direction, rotation.z * Math.PI);
+      if (this.lastPosition) {
+          camera.moveLeft(this.lastPosition.x * factor);
+          camera.moveDown(this.lastPosition.y * factor);
+          camera.moveForward(this.lastPosition.z * factor);
+      }
 
       camera.moveBackward(position.z * factor);
       camera.moveUp(position.y * factor);
       camera.moveRight(position.x * factor);
+
+      camera.lookLeft(rotation.y * Math.PI);
+      camera.lookUp(rotation.x * Math.PI);
+      camera.look(camera.direction, rotation.z * Math.PI);
 
       this.lastRotation = rotation;
       this.lastPosition = position;
