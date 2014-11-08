@@ -1,64 +1,79 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<title>Hello Virtual World!</title>
-<script src="lib/cesium-build/Cesium.js"></script>
-<script src="lib/vr.js/lib/vr.js"></script>
-<style>
-@import url(lib/cesium-build/Widgets/widgets.css);
+    <title>Hello Virtual World!</title>
 
-body,html {
-	height: 100%;
-}
+    <script src="lib/cesium-build/Cesium.js"></script>
 
-body {
-	padding: 0;
-	border: 0;
-	margin: 0;
-	overflow: hidden;
-}
+    <script src="lib/vr.js/lib/vr.js"></script>
+    <script src="src/cesium-oculus.js"></script>
+    <script src="src/canvas-copy.js"></script>
+    <link rel="stylesheet" type="text/css" href="src/cesium-oculus.css">
 
-#stereo div {
-	pointer-events: none;
-	height: 100%;
-	width: 50%;
-	border: 0px solid red;
-	margin-left: 0px;
-	float: left;
-}
-
-.eye {
-	float: left;
-	width: 50%;
-	height: 100%;
-	border: 0px solid red;
-}
-
-.fullSize {
-	display: block;
-	position: relative;
-	top: 0;
-	left: 0;
-	border: none;
-	width: 100%;
-	height: 100%;
-}
-</style>
+    <style>                
+        body, html {
+            height: 100%;
+        }
+        body {
+	        padding: 0;
+	        border: 0;
+	        margin: 0;
+	        overflow: hidden;
+        }
+    </style>
 </head>
 <body>
+  <div id="cesiumOculusContainer" style="width: 100%; height: 100%"/> 
+    
+  <script>
+      function testSceneCreation() {
+          var someCanvas = document.createElement('canvas');
+          document.body.appendChild(someCanvas);
+          var scene = createScene(someCanvas);
 
-  <div style="width: 100%; height: 100%">
-    <div id="cesiumContainerLeft" class="eye"></div>
-    <div id="cesiumContainerRight" class="eye"></div>
-  </div>
+          function createImageryProvider() {
+              return new Cesium.BingMapsImageryProvider({
+                  url: '//dev.virtualearth.net',
+                  mapStyle: Cesium.BingMapsStyle.AERIAL
+              });
+          }
 
-  <!-- library -->
-  <script src="src/cesium-oculus.js"></script>
-  <script src="src/canvas-copy.js"></script>
-  
-  <!-- app -->
-  <script src="locations.js"></script>
-  <script src="index.js"></script>
+          function createTerrainProvider() {
+              return new Cesium.CesiumTerrainProvider({
+                  url: '//cesiumjs.org/stk-terrain/tilesets/world/tiles'
+              });
+          }
+
+          function createScene(canvas) {
+              var ellipsoid = Cesium.Ellipsoid.WGS84;
+              var scene = new Cesium.Scene({ canvas: canvas });
+              var primitives = scene.primitives;
+
+              scene.camera.frustum._fovy = Cesium.Math.toRadians(100.0);
+
+              var cb = new Cesium.Globe(ellipsoid);
+              cb.imageryLayers.addImageryProvider(createImageryProvider());
+              cb.terrainProvider = createTerrainProvider();
+
+              scene.globe = cb;
+
+              // Prevent right-click from opening a context menu.
+              canvas.oncontextmenu = function () {
+                  return false;
+              };
+
+              scene.skyAtmosphere = new Cesium.SkyAtmosphere();
+
+              return scene;
+          }
+
+          return scene;
+      }
+
+      var scene = testSceneCreation();
+
+      var cesiumOculus = new CesiumOculus(scene, 'cesiumOculusContainer');
+  </script>
   
 </body>
 </html>

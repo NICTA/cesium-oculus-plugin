@@ -5,54 +5,138 @@ var CesiumOculus = (function() {
     alert(msg);
   }
 
-  var CesiumOculus = function(callback, errorHandler) {
-    this.errorHandler = typeof errorHandler === 'undefined' ? defaultErrorHandler : errorHandler;
-    this.state = undefined;
-    this.hmdInfo = undefined;
+  var CesiumOculus = function (cesiumScene, parentDivName) {
+      var parentContainer = document.getElementById(parentDivName);
 
-    this.firstTime = true;
-    this.refMtx = new Cesium.Matrix3();
+      var leftContainer = document.createElement('DIV');
+      parentContainer.appendChild(leftContainer);
+      leftContainer.className = "eye";
 
-    var that = this;
+      var rightContainer = document.createElement('DIV');
+      parentContainer.appendChild(rightContainer);
+      rightContainer.className = "eye";
 
-    that.hmdInfo = {
-        "deviceName": "Oculus Rift DK2",
-        "deviceManufacturer": "Oculus VR",
-        "deviceVersion": 0,
-        "desktopX": 0,
-        "desktopY": 0,
-        "resolutionHorz": 1920,
-        "resolutionVert": 1080,
-        "screenSizeHorz": 0.14976,
-        "screenSizeVert": 0.0936,
-        "screenCenterVert": 0.0468,
-        "eyeToScreenDistance": 0.041,
-        "lensSeparationDistance": 0.0635,
-        "interpupillaryDistance": 0.064,
-        "distortionK": {
-            "0": 1,
-            "1": 0.2199999988079071,
-            "2": 0.23999999463558197,
-            "3": 0
-        },
-        "chromaAbCorrection": {
-            "0": 0.9959999918937683,
-            "1": -0.004000000189989805,
-            "2": 1.0140000581741333,
-            "3": 0
-        }
-    };
-    that.state = vr.createState();
-    that.params = {
-        "left": getParams(that.hmdInfo, 'left'),
-        "right": getParams(that.hmdInfo, 'right')
-    };
+      var canvasL = cesiumScene.canvas;
+      canvasL.className = "fullSize";
+      leftContainer.appendChild(canvasL);
 
-    vr.wait(function(error) {
-      if (typeof (callback) !== 'undefined') {
-        callback(that.hmdInfo);
+      var canvasR = document.createElement('canvas');
+      canvasR.className = "fullSize";
+      rightContainer.appendChild(canvasR);
+
+      var canvasCopy = new CanvasCopy(canvasR, false);
+
+      var cesiumOculus = this;
+      init(cesiumOculus, run);
+
+      function run() {
+
+          var camera = cesiumScene.camera;
+          var eyeSeparation = 5.0;
+
+          var tick = function () {
+
+              cesiumScene.initializeFrame();
+
+              // Take into account user head rotation
+              cesiumOculus.applyOculusTransformation(camera, cesiumOculus.getRotation(), cesiumOculus.getPosition());
+              var modCamera = camera.clone();
+
+              // Render right eye
+              CesiumOculus.slaveCameraUpdate(modCamera, eyeSeparation * 0.5, camera);
+              cesiumOculus.setSceneParams(cesiumScene, 'right');
+              cesiumScene.render();
+
+              canvasCopy.copy(canvasL);
+
+              // Render left eye
+              CesiumOculus.slaveCameraUpdate(modCamera, -eyeSeparation * 0.5, camera);
+              cesiumOculus.setSceneParams(cesiumScene, 'left');
+              cesiumScene.render();
+
+              // Restore state
+              CesiumOculus.slaveCameraUpdate(modCamera, 0.0, camera);
+
+              Cesium.requestAnimationFrame(tick);
+          };
+
+          tick();
       }
-    });
+
+      // Resize handler
+      var onResizeScene = function (canvas, cesiumScene) {
+          // Render at higher resolution so the result is still sharp
+          // when magnified by the barrel distortion
+          var supersample = 1.5;
+          var width = canvas.clientWidth * supersample;
+          var height = canvas.clientHeight * supersample;
+
+          if (canvas.width === width && canvas.height === height) {
+              return;
+          }
+
+          canvas.width = width;
+          canvas.height = height;
+          cesiumScene.camera.frustum.aspectRatio = width / height;
+      };
+
+      var onResize = function () {
+          onResizeScene(canvasL, cesiumScene);
+          onResizeScene(canvasR, cesiumScene);
+      };
+
+      window.addEventListener('resize', onResize, false);
+      window.setTimeout(onResize, 20);
+  };
+
+  function init(cesiumOculus, callback, errorHandler) {
+      cesiumOculus.errorHandler = typeof errorHandler === 'undefined' ? defaultErrorHandler : errorHandler;
+      cesiumOculus.state = undefined;
+      cesiumOculus.hmdInfo = undefined;
+
+      cesiumOculus.firstTime = true;
+      cesiumOculus.refMtx = new Cesium.Matrix3();
+
+      var that = cesiumOculus;
+
+      that.hmdInfo = {
+          "deviceName": "Oculus Rift DK2",
+          "deviceManufacturer": "Oculus VR",
+          "deviceVersion": 0,
+          "desktopX": 0,
+          "desktopY": 0,
+          "resolutionHorz": 1920,
+          "resolutionVert": 1080,
+          "screenSizeHorz": 0.14976,
+          "screenSizeVert": 0.0936,
+          "screenCenterVert": 0.0468,
+          "eyeToScreenDistance": 0.041,
+          "lensSeparationDistance": 0.0635,
+          "interpupillaryDistance": 0.064,
+          "distortionK": {
+              "0": 1,
+              "1": 0.2199999988079071,
+              "2": 0.23999999463558197,
+              "3": 0
+          },
+          "chromaAbCorrection": {
+              "0": 0.9959999918937683,
+              "1": -0.004000000189989805,
+              "2": 1.0140000581741333,
+              "3": 0
+          }
+      };
+      that.state = vr.createState();
+      that.params = {
+          "left": getParams(that.hmdInfo, 'left'),
+          "right": getParams(that.hmdInfo, 'right')
+      };
+
+      vr.wait(function (error) {
+          if (typeof (callback) !== 'undefined') {
+              callback(that.hmdInfo);
+          }
+      });
   };
 
   function getParams(hmd, eye) {
@@ -74,7 +158,7 @@ var CesiumOculus = (function() {
     switch (eye) {
     case "left":
     case "right":
-      var p = this.params[eye];
+        var p = this.params[eye];
       scene.customPostProcess = p.postProcessFilter;
       scene.camera.frustum.setOffset(p.frustumOffset, 0.0);
       break;
@@ -214,12 +298,11 @@ var CesiumOculus = (function() {
   };
 
   CesiumOculus.prototype.applyOculusTransformation = function(camera, rotation, position) {
-      var factor = 5000;
-
+      var factor = 500;
 
       if (this.lastRotation) {
           camera.look(camera.direction, -this.lastRotation.z * Math.PI);
-          camera.lookDown(this.lastRotation.x * Math.PI);
+          camera.lookDown(this.lastRotation.x * Math.PI);          
           camera.lookRight(this.lastRotation.y * Math.PI);
       }   
 
@@ -228,18 +311,24 @@ var CesiumOculus = (function() {
           camera.moveDown(this.lastPosition.y * factor);
           camera.moveForward(this.lastPosition.z * factor);
       }
+      var quaternion = new Cesium.Quaternion();
+      Cesium.Quaternion.multiplyByScalar(rotation, Math.PI, quaternion);
+      var rotationMatrix = Cesium.Matrix3.fromQuaternion(quaternion);
+      
+      var rotatedPosition = new Cesium.Cartesian3();
+      Cesium.Matrix3.multiplyByVector(rotationMatrix, position, rotatedPosition);
 
-      camera.moveBackward(position.z * factor);
-      camera.moveUp(position.y * factor);
-      camera.moveRight(position.x * factor);
+      camera.moveBackward(rotatedPosition.z * factor);
+      camera.moveUp(rotatedPosition.y * factor);
+      camera.moveRight(rotatedPosition.x * factor);     
 
-      camera.lookLeft(rotation.y * Math.PI);
+      camera.lookLeft(rotation.y * Math.PI);      
       camera.lookUp(rotation.x * Math.PI);
       camera.look(camera.direction, rotation.z * Math.PI);
-
+      
       this.lastRotation = rotation;
-      this.lastPosition = position;
-      this.lastDirection = camera.position   
+      this.lastPosition = rotatedPosition;
+      this.lastDirection = camera.position;
   };
 
   return CesiumOculus;
